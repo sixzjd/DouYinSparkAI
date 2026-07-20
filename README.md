@@ -17,14 +17,17 @@
 
 配置一次，之后每天自动运行，无需维护服务器。
 
-### 第一步：创建仓库并推送代码
+### 第一步：推送代码到 GitHub
 
-在 GitHub 新建一个**空仓库**（不勾选 README/gitignore），然后：
+在 GitHub 上创建一个新仓库（**不要**勾选 "Add a README" 或 .gitignore，保持完全空白），然后在本地项目目录执行：
 
 ```bash
+cd DouYinSparkAI
 git remote add origin https://github.com/你的用户名/你的仓库名.git
 git push -u origin main
 ```
+
+> 注意：后续所有配置（Environment、Secrets）都在**这个推了代码的仓库**里操作，不要另外建仓库。
 
 ### 第二步：获取抖音 Cookie（自动）
 
