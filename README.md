@@ -68,7 +68,7 @@ git push -u origin main
 ```
 
 - `unique_id` 决定 Cookie 变量名：`user1` → 对应 Secret `COOKIES_USER1`（自动转大写）
-- `targets` 里填好友的抖音昵称（默认）或抖音号（`MATCH_MODE=short_id` 时）
+- `targets` 里填好友列表里显示的名字：有备注就填备注，没备注就填对方昵称。如果设置 `MATCH_MODE=short_id`，则填抖音号
 - 支持多账号：添加多个对象，每个配对应的 `COOKIES_XXX`
 
 ### 5. 启用并测试
