@@ -25,7 +25,16 @@ def main():
     print()
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=False)
+        # 优先使用系统已装的 Edge/Chrome，无需额外下载 Chromium
+        for channel in ["msedge", "chrome", None]:
+            try:
+                browser = pw.chromium.launch(headless=False, channel=channel)
+                break
+            except Exception:
+                continue
+        else:
+            print("[!] 未找到 Edge/Chrome，请先运行: python3 -m playwright install chromium")
+            import sys; sys.exit(1)
         context = browser.new_context()
         page = context.new_page()
 
@@ -75,7 +84,7 @@ def main():
         time.sleep(2)  # 等 Cookie 完全写入
 
         # 提取所有 Cookie
-        cookies = context.get_cookies()
+        cookies = context.cookies()
 
         # 只保留 creator.douyin.com 相关的
         douyin_cookies = [
