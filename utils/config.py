@@ -10,7 +10,9 @@ import os
 def get_config() -> dict:
     """读取全局配置"""
     return {
-        # AI 模型配置 (OpenAI 兼容格式)
+        # AI 配置
+        # provider: "openai"(默认, 兼容所有 OpenAI 格式的中转站) 或 "anthropic"
+        "ai_provider": os.getenv("AI_PROVIDER", "openai").lower(),
         "ai_base_url": os.getenv("AI_BASE_URL", "https://api.deepseek.com"),
         "ai_api_key": os.getenv("AI_API_KEY", ""),
         "ai_model": os.getenv("AI_MODEL", "deepseek-chat"),
