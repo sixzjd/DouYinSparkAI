@@ -36,6 +36,7 @@ jobs:
       - name: Run Spark AI
         env:
           TASKS: ${{ vars.TASKS }}
+          COOKIES_USER1: ${{ secrets.COOKIES_USER1 }}
           AI_PROVIDER: ${{ vars.AI_PROVIDER }}
           AI_BASE_URL: ${{ vars.AI_BASE_URL }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
