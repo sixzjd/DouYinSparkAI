@@ -55,8 +55,8 @@ def get_tasks() -> list[dict]:
             continue
 
         try:
-            cookies = json.loads(cookie_str.encode("utf-8").decode("unicode_escape"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
+            cookies = json.loads(cookie_str)
+        except json.JSONDecodeError:
             continue
 
         # 移除 Playwright 不支持的字段

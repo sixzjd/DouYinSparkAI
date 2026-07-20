@@ -164,6 +164,10 @@ def navigate_to_chat(page: Page, cookies: list[dict], config: dict):
     )
     page.context.add_cookies(cookies)
 
+    # 刷新页面让 Cookie 生效
+    page.reload(timeout=timeout)
+    time.sleep(2)
+
     # 导航到私信页面
     retry(
         "导航到私信页面",
