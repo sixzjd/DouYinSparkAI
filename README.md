@@ -26,13 +26,19 @@ git remote add origin https://github.com/你的用户名/你的仓库名.git
 git push -u origin main
 ```
 
-### 第二步：获取抖音 Cookie
+### 第二步：获取抖音 Cookie（自动）
 
-1. 电脑浏览器打开 https://creator.douyin.com/ 并登录
-2. F12 → Application → Cookies → `https://creator.douyin.com`
-3. 用 EditThisCookie 等插件导出 JSON 格式（或手动复制）
+运行项目自带的 Cookie 获取工具：
 
-> Cookie 有效期约 1-3 个月，过期后重新获取并更新 Secret 即可。
+```bash
+pip install playwright
+playwright install chromium
+python get_cookies.py
+```
+
+脚本会自动打开浏览器，用手机抖音扫码登录后，Cookie 自动提取并输出到终端和 `cookies.json` 文件。
+
+> Cookie 有效期约 1-3 个月，过期后重新运行 `python get_cookies.py` 并更新 Secret 即可。
 
 ### 第三步：配置 GitHub Environment
 
