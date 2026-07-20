@@ -149,6 +149,7 @@ class UserIdCollector:
 
 def navigate_to_chat(page: Page, cookies: list[dict], config: dict):
     """导航到创作者中心私信页面（带重试）"""
+    import os
     timeout = config["browser_timeout"]
     retries = config["task_retry_times"]
 
@@ -173,6 +174,11 @@ def navigate_to_chat(page: Page, cookies: list[dict], config: dict):
         timeout=timeout,
     )
     time.sleep(3)
+
+    # 调试截图：记录页面实际状态
+    os.makedirs("logs", exist_ok=True)
+    page.screenshot(path="logs/debug_chat_page.png", full_page=True)
+    logger.info("已保存页面截图 logs/debug_chat_page.png")
 
 
 def find_and_click_friend(page: Page, friend_name: str, config: dict,
