@@ -1,11 +1,8 @@
 """
 Cookie 自动获取工具
-打开浏览器 → 手机抖音扫码登录 → 自动提取 Cookie → 输出 JSON
+打开浏览器 → 手机抖音扫码登录 → 等待 session 完全建立 → 提取 Cookie
 
-用法:
-    python get_cookies.py
-
-登录成功后 Cookie 会打印到终端并保存到 cookies.json 文件。
+用法: python3 get_cookies.py
 """
 
 import json
@@ -21,107 +18,97 @@ def main():
     print("=" * 50)
     print()
     print("即将打开浏览器，请用手机抖音扫码登录。")
-    print("登录成功后会自动提取 Cookie。")
     print()
 
     with sync_playwright() as pw:
-        # 优先使用系统已装的 Edge/Chrome，无需额外下载 Chromium
+        # 优先用系统 Edge/Chrome
+        browser = None
         for channel in ["msedge", "chrome", None]:
             try:
                 browser = pw.chromium.launch(headless=False, channel=channel)
                 break
             except Exception:
                 continue
-        else:
-            print("[!] 未找到 Edge/Chrome，请先运行: python3 -m playwright install chromium")
-            import sys; sys.exit(1)
+        if not browser:
+            print("[!] 未找到浏览器，请先运行: python3 -m playwright install chromium")
+            sys.exit(1)
+
         context = browser.new_context()
         page = context.new_page()
 
-        # 打开创作者中心登录页
         page.goto("https://creator.douyin.com/")
         print("[*] 浏览器已打开，请扫码登录...")
         print()
 
-        # 等待登录成功（检测 URL 变化或特定元素出现）
-        # 登录成功后会跳转到创作者中心主页
-        max_wait = 120  # 最多等 2 分钟
+        # 等待登录成功
+        max_wait = 120
         logged_in = False
-
         for i in range(max_wait):
             time.sleep(1)
-            current_url = page.url
-
-            # 登录成功的标志：URL 不再是 login 页面，或页面出现用户头像等元素
-            if "login" not in current_url and "passport" not in current_url:
-                # 再确认一下：检查是否有用户相关元素
-                try:
-                    # 创作者中心登录后通常有用户信息区域
-                    user_el = page.locator(
-                        'xpath=//div[contains(@class, "user") or contains(@class, "avatar") '
-                        'or contains(@class, "header-info")]'
-                    )
-                    if user_el.count() > 0:
-                        logged_in = True
-                        break
-                except Exception:
-                    pass
-
-                # URL 已经跳转了，大概率登录成功
-                if i > 5:  # 给页面一点加载时间
-                    logged_in = True
-                    break
-
+            url = page.url
+            if "login" not in url and "passport" not in url and "sso" not in url:
+                # URL 已跳转，但需要等 cookie 完全写入
+                time.sleep(5)  # 多等几秒让所有 cookie 落盘
+                logged_in = True
+                break
             if (i + 1) % 15 == 0:
-                print(f"[*] 已等待 {i+1} 秒，仍在等待扫码...")
+                print(f"[*] 已等待 {i+1} 秒...")
 
         if not logged_in:
-            print("[!] 等待超时（2分钟），请重试。")
+            print("[!] 等待超时，请重试。")
             browser.close()
             sys.exit(1)
 
-        print("[+] 检测到登录成功！正在提取 Cookie...")
-        time.sleep(2)  # 等 Cookie 完全写入
+        print("[+] 登录成功！正在建立完整会话...")
 
-        # 提取所有 Cookie
-        cookies = context.cookies()
+        # 关键：访问多个页面确保所有域的 cookie 都被设置
+        time.sleep(3)
+        page.goto("https://creator.douyin.com/creator-micro/home")
+        time.sleep(3)
+        page.goto("https://creator.douyin.com/creator-micro/data/following/chat")
+        time.sleep(3)
 
-        # 只保留 creator.douyin.com 相关的
-        douyin_cookies = [
-            c for c in cookies
-            if "douyin.com" in c.get("domain", "")
-        ]
-
+        # 提取所有 cookie
+        all_cookies = context.cookies()
         browser.close()
 
-    if not douyin_cookies:
-        print("[!] 未获取到有效 Cookie，请重试。")
-        sys.exit(1)
+    # 筛选 douyin 相关
+    douyin_cookies = [c for c in all_cookies if "douyin" in c.get("domain", "")]
 
-    # 输出
+    # 检查关键 cookie
+    names = [c["name"] for c in douyin_cookies]
+    key_names = ["sessionid", "sessionid_ss", "sid_guard", "sid_tt", "passport_csrf_token"]
+    found_keys = [k for k in key_names if k in names]
+    missing_keys = [k for k in key_names if k not in names]
+
+    print()
+    print("=" * 50)
+    print(f"[+] 共获取 {len(douyin_cookies)} 条 Cookie")
+    print(f"[+] 关键认证 Cookie: {found_keys}")
+    if missing_keys:
+        print(f"[!] 缺少: {missing_keys}")
+        print("[!] 可能影响登录，建议重新扫码重试")
+    print("=" * 50)
+    print()
+
+    # 清理 Playwright 不兼容的字段
+    for c in douyin_cookies:
+        c.pop("sameSite", None)
+        # expires=-1 的 session cookie 改为不设过期
+        if c.get("expires", 0) < 0:
+            c["expires"] = -1  # Playwright 接受 -1 表示 session cookie
+
     cookie_json = json.dumps(douyin_cookies, ensure_ascii=False)
 
-    print()
-    print("=" * 50)
-    print(f"[+] 成功获取 {len(douyin_cookies)} 条 Cookie")
-    print("=" * 50)
-    print()
-
-    # 保存到文件
     with open("cookies.json", "w", encoding="utf-8") as f:
         f.write(cookie_json)
     print("[+] 已保存到 cookies.json")
     print()
-
-    # 打印到终端（方便直接复制到 GitHub Secrets）
-    print("─── Cookie JSON（复制到 GitHub Secret）───")
+    print("─── 复制下面的 JSON 到 GitHub Secret (COOKIES_USER1) ───")
     print()
     print(cookie_json)
     print()
     print("─── 结束 ───")
-    print()
-    print("提示：将上面的 JSON 粘贴到 GitHub 仓库的")
-    print("Settings → Environments → user-data → Secrets → COOKIES_USER1")
 
 
 if __name__ == "__main__":
