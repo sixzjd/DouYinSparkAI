@@ -67,12 +67,16 @@ CHAT_INPUT_SELECTORS = [
     "xpath=//div[contains(@class, 'messageMsgInput')]",
 ]
 
-# 消息列表项
+# 消息列表项（聊天区域）
+# 真实结构: box-content 容器内的一排排 div.box-item-*；
+# class 后缀哈希（如 W0TV01）随版本变化，必须用前缀子串匹配。
+# 注意: 内层内容包装的 class 是 box-item-message-*，也含 "box-item-" 子串，
+#       必须用 :not() 排除，否则每条消息会被读两次（且内层不带 is-me 会误判发送方）。
+# 消息行里混有 time-（时间分隔）和 tip-（系统提示）需要跳过。
 MESSAGE_ITEM_SELECTORS = [
+    '[class*="box-content"] div[class*="box-item-"]:not([class*="box-item-message"])',
+    'div[class*="box-item-"]:not([class*="box-item-message"])',
     'xpath=//div[contains(@class, "messageMessageList")]//div[@data-e2e="msg-item-content"]',
-    'xpath=//div[@id="messageContent"]//div[contains(@style, "justify-content")]',
-    'xpath=//div[contains(@class, "chat-message")]//div[contains(@class, "msg-item")]',
-    'xpath=//div[contains(@class, "message-list")]//div[contains(@class, "message-item")]',
 ]
 
 # 用户详情 API（用于 short_id 匹配模式）
@@ -348,44 +352,60 @@ def read_recent_messages(page: Page, config: dict) -> list[dict]:
         logger.warning("未找到消息列表元素")
         return messages
 
-    # 只取最近 10 条
-    for item in msg_items[-10:]:
+    for item in msg_items:
         try:
-            text = item.inner_text().strip()
-            if not text:
+            cls = item.get_attribute("class") or ""
+
+            # 跳过时间分隔符（time-）和系统提示（tip-），它们不是真正的消息
+            if "time-" in cls or "tip-" in cls:
                 continue
 
-            # 检测视频/卡片消息
-            is_video = False
-            video_title = ""
-            card_el = item.locator(
-                "xpath=.//*[contains(@class, 'video') or contains(@class, 'card') "
-                "or contains(@class, 'share') or contains(@class, 'aweme')]"
-            )
-            if card_el.count() > 0:
-                is_video = True
-                video_title = text
+            # 发送方向：自己的消息带 is-me 前缀类
+            is_self = "is-me" in cls
 
-            # 判断发送方向
-            item_class = item.get_attribute("class") or ""
-            parent_class = ""
-            try:
-                parent_class = item.locator("xpath=..").get_attribute("class") or ""
-            except Exception:
-                pass
-            combined = (item_class + " " + parent_class).lower()
-            is_self = any(kw in combined for kw in ["self", "right", "mine", "sender", "is-self"])
+            # 视频/卡片消息：带 aweme-cover 封面元素
+            cover = item.locator('[class*="aweme-cover"]')
+            is_video = cover.count() > 0
 
-            messages.append({
-                "sender": "me" if is_self else "friend",
-                "text": text,
-                "is_video": is_video,
-                "video_title": video_title,
-            })
+            # 文本内容：在 pre[class*="text-item-message"] 里
+            text_el = item.locator('pre[class*="text-item-message"]').first
+            if text_el.count() == 0:
+                text_el = item.locator("pre").first
+            text = text_el.inner_text().strip() if text_el.count() > 0 else ""
+
+            if is_video:
+                # 视频卡片：尽量拿到封面里的文案（作者/标题），拿不到就标记为视频
+                video_title = text or "[视频]"
+                messages.append({
+                    "sender": "me" if is_self else "friend",
+                    "text": text,
+                    "is_video": True,
+                    "video_title": video_title,
+                })
+            elif text:
+                messages.append({
+                    "sender": "me" if is_self else "friend",
+                    "text": text,
+                    "is_video": False,
+                    "video_title": "",
+                })
+            # 纯表情/图片消息（text 为空且非视频）：暂不记录
         except Exception:
             continue
 
-    return messages
+    # 抖音 DOM 有时会把同一条消息渲染两次（虚拟列表/表情消息），
+    # 去掉"连续且完全相同"的消息，避免 AI 上下文重复
+    deduped = []
+    for m in messages:
+        if (deduped
+                and deduped[-1]["sender"] == m["sender"]
+                and deduped[-1]["text"] == m["text"]
+                and deduped[-1]["is_video"] == m["is_video"]):
+            continue
+        deduped.append(m)
+
+    # 只保留最近 10 条
+    return deduped[-10:]
 
 
 def should_reply(messages: list[dict]) -> bool:
