@@ -31,14 +31,14 @@ jobs:
           LOG_LEVEL: DEBUG
         run: python learn_style.py
 
-      - name: Save style profile to repo variable
+      - name: Save style profile to repo secret
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           if [ -f logs/style_profile.txt ]; then
             PROFILE=$(cat logs/style_profile.txt)
-            gh variable set STYLE_PROFILE --body "$PROFILE"
-            echo "✅ 风格已学习并保存到仓库变量 STYLE_PROFILE"
+            gh secret set STYLE_PROFILE --body "$PROFILE"
+            echo "✅ 风格已学习并保存到仓库 Secret STYLE_PROFILE"
             echo "内容: $PROFILE"
           else
             echo "❌ 未生成 style_profile.txt"
