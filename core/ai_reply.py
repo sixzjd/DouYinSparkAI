@@ -82,7 +82,9 @@ def _call_openai_compatible(config: dict, user_prompt: str) -> str:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        max_tokens=100,
+        # 思考型模型（如 deepseek-v4-flash）会先推理再输出，推理也计入 token；
+        # 上限太小会被推理占满导致正文为空（finish_reason=length），故放宽到 2000
+        max_tokens=2000,
         temperature=0.9,
     )
 
@@ -115,7 +117,8 @@ def _call_anthropic(config: dict, user_prompt: str) -> str:
 
     response = client.messages.create(
         model=config["ai_model"],
-        max_tokens=100,
+        # 同 openai 路径：给思考型模型留足 推理+正文 的 token 空间
+        max_tokens=2000,
         temperature=0.9,
         system=SYSTEM_PROMPT,
         messages=[
@@ -127,17 +130,15 @@ def _call_anthropic(config: dict, user_prompt: str) -> str:
 
 
 def _fallback_message() -> str:
-    """AI 不可用时的兜底消息"""
+    """AI 不可用时的兜底消息（尽量朴素，避免发用户绝不会说的套路话）"""
     import random
     messages = [
-        "今天也要开心呀",
+        "在吗",
+        "最近咋样",
         "在干嘛呢",
-        "火花不能断！",
-        "今日份打卡",
-        "嘿 还活着吗",
-        "续个火",
-        "又是新的一天",
-        "想你了 冒个泡",
-        "今天天气咋样",
+        "好久没聊了",
+        "哈喽",
+        "冒个泡",
+        "今天忙不",
     ]
     return random.choice(messages)
