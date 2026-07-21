@@ -11,23 +11,24 @@ from utils.logger import setup_logger
 logger = setup_logger()
 
 SYSTEM_PROMPT = (
-    "你是一个帮用户维护抖音好友关系的助手。"
-    "用户需要每天给好友发消息来续火花（保持连续互动天数）。\n"
-    "规则：\n"
-    "1. 回复要自然、口语化，像朋友之间随便聊天，不要太正式\n"
-    "2. 如果对方分享了视频，根据视频内容简短评论或表达兴趣\n"
-    "3. 如果没有具体内容可回复，就发一条轻松的日常问候或闲聊\n"
-    "4. 字数控制在 5-30 字，简短自然\n"
-    "5. 不要加引号、不要加表情符号描述、不要解释你在做什么\n"
-    "6. 每次内容要不一样，有创意"
+    "你要扮演用户本人，给抖音好友回一条消息来续火花（保持连续互动天数）。\n"
+    "要求：\n"
+    "1. 仔细学习提供的【我平时说话风格】，模仿我的语气、用词和口头禅来回复\n"
+    "2. 必须接住对方最后一句话的话题，顺着聊，不要答非所问、不要硬转话题\n"
+    "3. 口语化、随意，像熟人之间日常闲聊，可以俏皮一点，但不要油腻、不要肉麻\n"
+    "4. 字数控制在 5-30 字，简短自然，一句话说完\n"
+    "5. 不要加引号，不要解释你在做什么，不要写表情符号的文字描述\n"
+    "6. 如果对方分享了视频，就视频内容简短评论或表达兴趣\n"
+    "7. 每次内容要不一样，有创意，不要重复套话"
 )
 
 
-def generate_reply(context: str, friend_name: str) -> str:
+def generate_reply(context: str, friend_name: str, style_examples: str = "") -> str:
     """
     根据上下文生成回复
-    :param context: 对方最近发的消息内容（含视频标题等）
+    :param context: 最近的对话流（双方消息，带 我:/对方: 标签）
     :param friend_name: 好友昵称
+    :param style_examples: 用户本人最近说的话（风格样本，供 AI 模仿）
     :return: 生成的回复文本
     """
     config = get_config()
@@ -38,7 +39,12 @@ def generate_reply(context: str, friend_name: str) -> str:
         logger.warning("未配置 AI_API_KEY，使用默认续火花消息")
         return _fallback_message()
 
-    user_prompt = f"好友「{friend_name}」最近发给我的消息：\n{context}\n\n请生成一条自然的回复："
+    user_prompt = (
+        f"【我平时说话风格】（请模仿）\n{style_examples}\n\n"
+        f"【最近聊天记录】\n{context}\n\n"
+        f"请模仿我的说话风格，接住对方最后一句话，"
+        f"生成一条我要发给好友「{friend_name}」的自然回复："
+    )
 
     try:
         if provider == "anthropic":

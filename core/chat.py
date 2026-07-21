@@ -421,19 +421,32 @@ def should_reply(messages: list[dict]) -> bool:
 
 
 def build_context(messages: list[dict]) -> str:
-    """从对方最近消息构建 AI 上下文"""
-    friend_msgs = [m for m in messages if m["sender"] == "friend"]
-    if not friend_msgs:
-        return "（对方最近没有发新消息，发一条轻松的问候续火花即可）"
+    """
+    构建完整对话流（双方消息按顺序、带标签），让 AI 理解来龙去脉、接住话题。
+    """
+    if not messages:
+        return "（没有可读消息，发一条轻松的问候续火花即可）"
 
     parts = []
-    for msg in friend_msgs[-5:]:
-        if msg["is_video"] and msg["video_title"]:
-            parts.append(f"[分享了一个视频，标题/描述: {msg['video_title']}]")
-        elif msg["text"]:
-            parts.append(msg["text"])
+    for m in messages[-8:]:
+        who = "我" if m["sender"] == "me" else "对方"
+        if m["is_video"]:
+            content = f"[分享了一个视频: {m['video_title']}]"
+        else:
+            content = m["text"]
+        parts.append(f"{who}: {content}")
+    return "\n".join(parts)
 
-    return "\n".join(parts) if parts else "（对方最近没有发新消息）"
+
+def build_style_examples(messages: list[dict]) -> str:
+    """
+    提取"我"最近说的话作为风格样本，让 AI 模仿我的语气和用词习惯。
+    """
+    my_msgs = [m["text"] for m in messages
+               if m["sender"] == "me" and not m["is_video"] and m["text"]]
+    if not my_msgs:
+        return "（暂无风格样本，用轻松随意的朋友口吻）"
+    return "\n".join(my_msgs[-5:])
 
 
 def send_message(page: Page, text: str, config: dict) -> bool:
@@ -489,7 +502,8 @@ def process_friend(page: Page, friend_name: str, config: dict,
         return True
 
     context = build_context(messages)
-    logger.debug(f"AI 上下文: {context}")
+    style = build_style_examples(messages)
+    logger.debug(f"AI 上下文:\n{context}")
 
-    reply = generate_reply(context, friend_name)
+    reply = generate_reply(context, friend_name, style_examples=style)
     return send_message(page, reply, config)
