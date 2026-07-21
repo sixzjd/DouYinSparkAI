@@ -15,20 +15,24 @@ SYSTEM_PROMPT = (
     "要求：\n"
     "1. 最高优先级：严格模仿提供的【我平时说话风格】——我的语气、用词、口头禅、情绪浓度是什么样，你就什么样\n"
     "2. 不要自行添加俏皮、可爱、撒娇、网络梗或夸张表达；我平时说得平淡你就回得平淡，宁可朴素也绝不装活泼\n"
-    "3. 必须接住对方最后一句话的话题，顺着聊，不要答非所问、不要硬转话题\n"
+    "3. 综合最近几条消息的语境来回复，不要只盯着最后一句；顺着聊天走向自然接话\n"
     "4. 字数控制在 5-30 字，简短自然，一句话说完，整体气质贴近样本\n"
     "5. 不要加引号，不要解释你在做什么，不要写表情符号的文字描述\n"
     "6. 如果对方分享了视频，就视频内容用我的语气简短评论或表达兴趣\n"
-    "7. 每次内容可以不一样，但都必须像我本人会说的话，不要重复套话"
+    "7. 每次内容可以不一样，但都必须像我本人会说的话，不要重复套话\n"
+    "8. 如果最后一条是我之前发的（不是今天），说明需要主动找话题续火花——"
+    "可以接着之前的话题追问、分享近况、或随意问候，像真人隔了一天再开口那样自然"
 )
 
 
-def generate_reply(context: str, friend_name: str, style_examples: str = "") -> str:
+def generate_reply(context: str, friend_name: str, style_examples: str = "",
+                   style_profile: str = "") -> str:
     """
     根据上下文生成回复
     :param context: 最近的对话流（双方消息，带 我:/对方: 标签）
     :param friend_name: 好友昵称
     :param style_examples: 用户本人最近说的话（风格样本，供 AI 模仿）
+    :param style_profile: 预学习的风格摘要（有值时优先使用，省 token）
     :return: 生成的回复文本
     """
     config = get_config()
@@ -39,10 +43,13 @@ def generate_reply(context: str, friend_name: str, style_examples: str = "") -> 
         logger.warning("未配置 AI_API_KEY，使用默认续火花消息")
         return _fallback_message()
 
+    # 优先使用预学习的风格摘要，没有则用现场提取的样本
+    style_section = style_profile if style_profile else style_examples
+
     user_prompt = (
-        f"【我平时说话风格】（请模仿）\n{style_examples}\n\n"
+        f"【我平时说话风格】（请模仿）\n{style_section}\n\n"
         f"【最近聊天记录】\n{context}\n\n"
-        f"请模仿我的说话风格，接住对方最后一句话，"
+        f"请模仿我的说话风格，根据最近几条消息的语境，"
         f"生成一条我要发给好友「{friend_name}」的自然回复："
     )
 

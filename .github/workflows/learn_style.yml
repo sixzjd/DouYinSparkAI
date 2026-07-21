@@ -1,0 +1,54 @@
+name: 学习说话风格
+
+on:
+  workflow_dispatch:  # 手动触发（风格变化时重新学习一次即可）
+
+jobs:
+  learn:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    environment: user-data
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install playwright openai anthropic --quiet && python -m playwright install chromium
+
+      - name: Learn style
+        env:
+          TASKS: ${{ vars.TASKS }}
+          COOKIES_USER1: ${{ secrets.COOKIES_USER1 }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER }}
+          AI_BASE_URL: ${{ vars.AI_BASE_URL }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
+          MATCH_MODE: ${{ vars.MATCH_MODE }}
+          LOG_LEVEL: DEBUG
+        run: python learn_style.py
+
+      - name: Save style profile to repo variable
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -f logs/style_profile.txt ]; then
+            PROFILE=$(cat logs/style_profile.txt)
+            gh variable set STYLE_PROFILE --body "$PROFILE"
+            echo "✅ 风格已学习并保存到仓库变量 STYLE_PROFILE"
+            echo "内容: $PROFILE"
+          else
+            echo "❌ 未生成 style_profile.txt"
+            exit 1
+          fi
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: learn-style-logs
+          path: logs/
+          retention-days: 7

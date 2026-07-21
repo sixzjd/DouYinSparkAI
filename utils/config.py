@@ -26,6 +26,9 @@ def get_config() -> dict:
         "match_mode": os.getenv("MATCH_MODE", "nickname"),
         # 试运行: true 时走完整流程但不真正发送消息（只打印），用于首次验证
         "dry_run": os.getenv("DRY_RUN", "false").lower() == "true",
+        # 预学习的说话风格摘要（由 learn_style 工作流生成并存为仓库变量）
+        # 有值时直接使用，不再每次从聊天记录现场提取风格样本，省 token
+        "style_profile": os.getenv("STYLE_PROFILE", ""),
     }
 
 

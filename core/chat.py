@@ -2,11 +2,12 @@
 核心聊天逻辑：
 1. 打开创作者中心私信页面（带重试）
 2. 滚动好友列表找到目标（多版本 DOM 兼容 + 到底检测）
-3. 检查今天是否已经发过消息（已发则跳过）
-4. 读取对方最近消息（含视频标题）
+3. 判断是否需要回复（对方发了→回复；我发的但不是今天→也回复续火花）
+4. 读取最近消息（含视频标题、时间标签）
 5. AI 生成回复并发送
 """
 
+import re
 import time
 from typing import Optional
 import traceback
@@ -121,6 +122,57 @@ def _try_locator_all(page: Page, selectors: list[str], timeout: int = 5000):
         except Exception:
             continue
     return []
+
+
+def is_today_label(label: str) -> bool:
+    """
+    判断时间分隔标签是否代表"今天"。
+    抖音聊天中，今天的消息时间标签是纯 HH:MM（如 "16:43"），
+    昨天显示"昨天"，本周显示"星期X"，更早显示"MM-DD"。
+    """
+    label = label.strip()
+    if "今天" in label:
+        return True
+    return bool(re.fullmatch(r"\d{1,2}:\d{2}", label))
+
+
+def fetch_video_description(url: str) -> str:
+    """
+    尝试从视频页面获取标题/描述（用于丰富 AI 上下文）。
+    用 urllib 请求页面，提取 <title> 或 meta description。
+    失败时静默返回空字符串（不影响主流程）。
+    """
+    if not url:
+        return ""
+    try:
+        import urllib.request
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://creator.douyin.com/",
+        })
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            html = resp.read(50000).decode("utf-8", errors="ignore")
+
+        # 优先取 meta description（通常是视频简介）
+        desc_match = re.search(
+            r'<meta\s+name="description"\s+content="([^"]*)"', html
+        )
+        if desc_match and desc_match.group(1).strip():
+            return desc_match.group(1).strip()[:200]
+
+        # 兜底取 <title>（格式一般是 "视频标题 - 抖音"）
+        title_match = re.search(r"<title>([^<]+)</title>", html)
+        if title_match:
+            title = title_match.group(1).strip()
+            # 去掉 " - 抖音" 后缀
+            title = re.sub(r"\s*[-–—]\s*抖音$", "", title)
+            return title[:200]
+
+    except Exception as e:
+        logger.debug(f"获取视频描述失败 ({url[:60]}): {e}")
+    return ""
 
 
 # ─── 响应拦截（short_id 匹配模式）───
@@ -417,6 +469,7 @@ def read_recent_messages(page: Page, config: dict) -> list[dict]:
     返回: [{"sender": "me"/"friend", "text": "...", "is_video": bool, "video_title": "..."}]
     """
     messages = []
+    current_time_label = ""  # 当前消息所属的时间分隔标签
     time.sleep(1)
 
     msg_items = _try_locator_all(page, MESSAGE_ITEM_SELECTORS, timeout=8000)
@@ -428,8 +481,13 @@ def read_recent_messages(page: Page, config: dict) -> list[dict]:
         try:
             cls = item.get_attribute("class") or ""
 
-            # 跳过时间分隔符（time-）和系统提示（tip-），它们不是真正的消息
-            if "time-" in cls or "tip-" in cls:
+            # 时间分隔符（time-）：记录标签文本，供后续消息关联
+            if "time-" in cls:
+                current_time_label = item.inner_text().strip()
+                continue
+
+            # 系统提示（tip-）：跳过
+            if "tip-" in cls:
                 continue
 
             # 发送方向：自己的消息带 is-me 前缀类
@@ -446,13 +504,26 @@ def read_recent_messages(page: Page, config: dict) -> list[dict]:
             text = text_el.inner_text().strip() if text_el.count() > 0 else ""
 
             if is_video:
-                # 视频卡片：尽量拿到封面里的文案（作者/标题），拿不到就标记为视频
-                video_title = text or "[视频]"
+                # 视频卡片：尽量多拿信息（标题、作者、描述、链接）
+                # 1. 卡片内所有可见文本（标题/作者/描述可能分散在不同子元素）
+                card_text = item.inner_text().strip()
+                video_title = card_text or text or "[视频]"
+
+                # 2. 尝试提取视频链接（用于后续获取详细描述）
+                video_url = ""
+                link_el = item.locator("a[href]").first
+                if link_el.count() > 0:
+                    href = link_el.get_attribute("href") or ""
+                    if "douyin.com" in href or "aweme" in href:
+                        video_url = href
+
                 messages.append({
                     "sender": "me" if is_self else "friend",
                     "text": text,
                     "is_video": True,
                     "video_title": video_title,
+                    "video_url": video_url,
+                    "time_label": current_time_label,
                 })
             elif text:
                 messages.append({
@@ -460,6 +531,7 @@ def read_recent_messages(page: Page, config: dict) -> list[dict]:
                     "text": text,
                     "is_video": False,
                     "video_title": "",
+                    "time_label": current_time_label,
                 })
             # 纯表情/图片消息（text 为空且非视频）：暂不记录
         except Exception:
@@ -482,19 +554,32 @@ def read_recent_messages(page: Page, config: dict) -> list[dict]:
 
 def should_reply(messages: list[dict]) -> bool:
     """
-    是否需要回复：只有当最后一条消息是对方发的，才回复。
-    回复后最后一条变成"我的"，自然不会重复发送，直到对方再次发消息。
-    这样实现"对方发了我没发 → 回复；我已发过 → 跳过"。
+    是否需要回复（续火花逻辑）：
+    1. 最后一条是对方发的 → 回复
+    2. 最后一条是我发的，但我今天还没发过消息 → 也回复（保持火花不断）
+    3. 最后一条是我发的，且今天已经发过 → 跳过（避免重复发送）
     """
     if not messages:
         return False  # 没读到消息，不贸然发送
+
     last = messages[-1]
-    return last["sender"] == "friend"
+    if last["sender"] == "friend":
+        return True
+
+    # 最后一条是我发的：检查我今天是否已经发过
+    sent_today = any(
+        m["sender"] == "me" and is_today_label(m.get("time_label", ""))
+        for m in messages
+    )
+    if sent_today:
+        return False  # 今天已发过，跳过
+    return True  # 最后一条是我发的但不是今天 → 需要续火花
 
 
 def build_context(messages: list[dict]) -> str:
     """
     构建完整对话流（双方消息按顺序、带标签），让 AI 理解来龙去脉、接住话题。
+    视频消息会尝试获取页面描述，让 AI 知道视频讲了什么。
     """
     if not messages:
         return "（没有可读消息，发一条轻松的问候续火花即可）"
@@ -503,7 +588,14 @@ def build_context(messages: list[dict]) -> str:
     for m in messages[-8:]:
         who = "我" if m["sender"] == "me" else "对方"
         if m["is_video"]:
-            content = f"[分享了一个视频: {m['video_title']}]"
+            title = m.get("video_title", "[视频]")
+            # 尝试获取视频详细描述（标题/简介）
+            url = m.get("video_url", "")
+            desc = fetch_video_description(url) if url else ""
+            if desc and desc != title:
+                content = f"[分享了一个视频: {title} | 内容: {desc}]"
+            else:
+                content = f"[分享了一个视频: {title}]"
         else:
             content = m["text"]
         parts.append(f"{who}: {content}")
@@ -570,12 +662,14 @@ def process_friend(page: Page, friend_name: str, config: dict,
         logger.info(f"最后一条消息来自: {'我' if last['sender'] == 'me' else '对方'} | 内容: {last['text'][:30]}")
 
     if not should_reply(messages):
-        logger.info(f"无需回复 {friend_name}（最后一条是我发的，或没有可读消息），跳过")
+        logger.info(f"无需回复 {friend_name}（今天已发过消息），跳过")
         return True
 
     context = build_context(messages)
     style = build_style_examples(messages)
+    style_profile = config.get("style_profile", "")
     logger.debug(f"AI 上下文:\n{context}")
 
-    reply = generate_reply(context, friend_name, style_examples=style)
+    reply = generate_reply(context, friend_name, style_examples=style,
+                           style_profile=style_profile)
     return send_message(page, reply, config)

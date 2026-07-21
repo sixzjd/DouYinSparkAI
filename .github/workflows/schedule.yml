@@ -47,6 +47,7 @@ jobs:
           AI_MODEL: ${{ vars.AI_MODEL }}
           MATCH_MODE: ${{ vars.MATCH_MODE }}
           DRY_RUN: ${{ vars.DRY_RUN }}
+          STYLE_PROFILE: ${{ vars.STYLE_PROFILE }}
           LOG_LEVEL: "INFO"
         run: python main.py
 
