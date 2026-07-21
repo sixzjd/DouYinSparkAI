@@ -86,7 +86,19 @@ def _call_openai_compatible(config: dict, user_prompt: str) -> str:
         temperature=0.9,
     )
 
-    return response.choices[0].message.content.strip()
+    # 诊断日志：排查空回复问题
+    if not response.choices:
+        logger.warning(f"API 返回空 choices，model={config['ai_model']}，原始响应: {response}")
+        return ""
+    choice = response.choices[0]
+    content = choice.message.content
+    if not content:
+        logger.warning(
+            f"API 返回空内容，model={config['ai_model']}，"
+            f"finish_reason={choice.finish_reason}，content={content!r}"
+        )
+        return ""
+    return content.strip()
 
 
 def _call_anthropic(config: dict, user_prompt: str) -> str:
