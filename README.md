@@ -123,6 +123,28 @@ cron: "0 1 * * *"  # UTC 时间，北京时间 = UTC + 8
 
 示例：`30 13 * * *` = 北京 21:30，`0 22 * * *` = 北京次日 6:00。
 
+### 暂停 / 恢复（可选）
+
+不想让它跑的几天（比如你自己会手动聊），可以一键暂停，不用改代码。
+
+开关是仓库变量 `SPARK_ENABLED`：
+
+- **暂停**：把它设为 `false`，每天的任务会整个跳过（连浏览器都不启动）。
+- **恢复**：改回 `true`（或直接删掉这个变量，默认就是运行）。
+
+两种改法：
+
+网页：仓库 **Settings → Secrets and variables → Actions → Variables**，找到 `SPARK_ENABLED` 编辑即可。
+
+命令行：
+
+```bash
+gh variable set SPARK_ENABLED --body "false"   # 暂停
+gh variable set SPARK_ENABLED --body "true"    # 恢复
+```
+
+> 注意：暂停期间 Cookie 不会续期。如果暂停超过 Cookie 有效期（约 1-3 个月），恢复后需要重新跑一次 `python get_cookies.py` 更新 Cookie。短期暂停（几天到几周）完全没影响。
+
 ---
 
 ## 部署方式二：手动部署（本地 / 服务器）

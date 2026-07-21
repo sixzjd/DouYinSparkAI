@@ -7,6 +7,10 @@ on:
 
 jobs:
   spark:
+    # 总开关：仓库变量 SPARK_ENABLED=false 时整个任务跳过（不启动浏览器）。
+    # 用 != 'false' 保证变量未设置时默认运行（向后兼容）。
+    # keepalive 任务不受影响，暂停期间 workflow 仍保活。
+    if: vars.SPARK_ENABLED != 'false'
     timeout-minutes: 15
     runs-on: ubuntu-latest
     environment: user-data
