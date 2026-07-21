@@ -147,36 +147,43 @@ class UserIdCollector:
 
 # ─── 主流程 ───
 
-def navigate_to_chat(page: Page, cookies: list[dict], config: dict):
+def navigate_to_chat(page: Page, cookies: list[dict], config: dict,
+                     has_storage_state: bool = False):
     """导航到创作者中心私信页面（带重试）"""
     import os
     timeout = config["browser_timeout"]
     retries = config["task_retry_times"]
 
-    # 先访问主页注入 cookie
-    retry(
-        "打开创作者中心",
-        page.goto,
-        retries=retries,
-        delay=5,
-        url="https://creator.douyin.com/",
-        timeout=timeout,
-    )
-    page.context.add_cookies(cookies)
+    if has_storage_state:
+        # storage_state 已包含完整登录态，直接访问私信页
+        retry(
+            "导航到私信页面",
+            page.goto,
+            retries=retries,
+            delay=5,
+            url="https://creator.douyin.com/creator-micro/data/following/chat",
+            timeout=timeout,
+        )
+    else:
+        # 纯 cookie 模式：先访问主页注入 cookie 再跳转
+        retry(
+            "打开创作者中心",
+            page.goto,
+            retries=retries,
+            delay=5,
+            url="https://creator.douyin.com/",
+            timeout=timeout,
+        )
+        page.context.add_cookies(cookies)
+        retry(
+            "导航到私信页面",
+            page.goto,
+            retries=retries,
+            delay=5,
+            url="https://creator.douyin.com/creator-micro/data/following/chat",
+            timeout=timeout,
+        )
 
-    # 刷新页面让 Cookie 生效
-    page.reload(timeout=timeout)
-    time.sleep(2)
-
-    # 导航到私信页面
-    retry(
-        "导航到私信页面",
-        page.goto,
-        retries=retries,
-        delay=5,
-        url="https://creator.douyin.com/creator-micro/data/following/chat",
-        timeout=timeout,
-    )
     time.sleep(3)
 
     # 调试截图：记录页面实际状态

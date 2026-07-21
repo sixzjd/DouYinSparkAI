@@ -32,7 +32,15 @@ def main():
             targets = user["targets"]
             logger.info(f"═══ 账号: {username} | 目标: {targets} ═══")
 
-            context = browser.new_context()
+            # 优先用完整 storage_state（含 localStorage），否则用空 context
+            storage_state = user.get("storage_state")
+            if storage_state:
+                context = browser.new_context(storage_state=storage_state)
+                logger.info("使用完整 storage_state 恢复登录态")
+            else:
+                context = browser.new_context()
+                logger.info("使用纯 Cookie 模式")
+
             context.set_default_navigation_timeout(config["browser_timeout"])
             context.set_default_timeout(config["browser_timeout"])
             page = context.new_page()
@@ -44,7 +52,7 @@ def main():
                 page.on("response", id_collector.on_response)
 
             try:
-                navigate_to_chat(page, user["cookies"], config)
+                navigate_to_chat(page, user["cookies"], config, has_storage_state=bool(storage_state))
 
                 for friend in targets:
                     try:

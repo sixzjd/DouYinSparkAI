@@ -32,13 +32,12 @@ def get_tasks() -> list[dict]:
     读取任务列表
     环境变量 TASKS 格式:
     [
-      {
-        "username": "我的昵称",
-        "unique_id": "user1",
-        "targets": ["好友昵称1", "好友昵称2"]
-      }
+      {"username": "昵称", "unique_id": "user1", "targets": ["好友A"]}
     ]
-    每个用户的 Cookie 存在 COOKIES_{UNIQUE_ID} 环境变量中 (大写)
+    登录态存在 COOKIES_{UNIQUE_ID} 环境变量中 (大写)。
+    支持两种格式:
+      1. storage_state 完整状态: {"cookies": [...], "origins": [...]}  (推荐)
+      2. 纯 cookie 数组: [...]  (兼容旧版)
     """
     tasks_raw = os.getenv("TASKS", "[]")
     tasks = json.loads(tasks_raw)
@@ -55,11 +54,21 @@ def get_tasks() -> list[dict]:
             continue
 
         try:
-            cookies = json.loads(cookie_str)
+            data = json.loads(cookie_str)
         except json.JSONDecodeError:
             continue
 
-        # 移除 Playwright 不支持的字段
+        # 判断格式
+        if isinstance(data, dict) and "cookies" in data:
+            # storage_state 完整状态格式
+            storage_state = data
+            cookies = data.get("cookies", [])
+        else:
+            # 纯 cookie 数组格式
+            storage_state = None
+            cookies = data
+
+        # 清理 Playwright 不支持的字段
         for c in cookies:
             c.pop("sameSite", None)
 
@@ -67,6 +76,7 @@ def get_tasks() -> list[dict]:
             "unique_id": uid,
             "username": task.get("username", "未知用户"),
             "cookies": cookies,
+            "storage_state": storage_state,
             "targets": task.get("targets", []),
         })
 
