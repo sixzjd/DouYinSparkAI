@@ -46,6 +46,29 @@ jobs:
           LOG_LEVEL: "INFO"
         run: python main.py
 
+      - name: Auto-refresh Cookie Secrets
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "未配置 GH_PAT，跳过 cookie 自动回写（不影响本次运行）"
+            exit 0
+          fi
+          shopt -s nullglob
+          files=(logs/fresh_cookies_*.json)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "没有抓取到新登录态（可能登录失效或未运行），跳过回写"
+            exit 0
+          fi
+          for f in "${files[@]}"; do
+            uid=$(basename "$f" .json | sed 's/^fresh_cookies_//')
+            secret_name="COOKIES_$(echo "$uid" | tr '[:lower:]' '[:upper:]')"
+            echo "回写 $secret_name ← $f"
+            gh secret set "$secret_name" --env user-data --body "$(cat "$f")"
+          done
+          echo "cookie 已自动续期"
+
       - name: Upload logs
         uses: actions/upload-artifact@v4
         if: always()

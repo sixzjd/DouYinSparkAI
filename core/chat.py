@@ -13,6 +13,7 @@ import traceback
 from playwright.sync_api import Page, Response
 from utils.config import get_config
 from utils.logger import setup_logger
+from utils.state_utils import slim_state
 from core.ai_reply import generate_reply
 
 logger = setup_logger()
@@ -212,6 +213,68 @@ def navigate_to_chat(page: Page, cookies: list[dict], config: dict,
     os.makedirs("logs", exist_ok=True)
     page.screenshot(path="logs/debug_chat_page.png", full_page=True)
     logger.info("已保存页面截图 logs/debug_chat_page.png")
+
+
+def is_logged_in(page: Page) -> bool:
+    """
+    判断当前会话是否处于登录态。
+    依据两点：
+    1. URL 没有被重定向到登录/passport/sso 页面；
+    2. cookie 中存在 sessionid（创作者中心登录的核心凭证，httpOnly）。
+    只有确认登录成功才去抓取/回写新 cookie，避免用坏 cookie 覆盖好 cookie。
+    """
+    url = page.url.lower()
+    if any(k in url for k in ("login", "passport", "sso", "verify")):
+        logger.warning(f"页面落在登录/验证页 ({page.url})，判定未登录")
+        return False
+
+    try:
+        cdp = page.context.new_cdp_session(page)
+        all_cookies = cdp.send("Network.getAllCookies").get("cookies", [])
+        cdp.detach()
+        names = {c["name"] for c in all_cookies}
+        if "sessionid" in names or "sessionid_ss" in names:
+            return True
+        logger.warning(f"cookie 中缺少 sessionid（现有 {len(names)} 条），判定未登录")
+        return False
+    except Exception as e:
+        logger.warning(f"登录态检测失败: {e}，保守判定未登录")
+        return False
+
+
+def capture_fresh_state(page: Page, path: str = "logs/fresh_cookies.json") -> bool:
+    """
+    抓取当前浏览器里的最新登录态并精简保存。
+    每次成功运行后，服务端通常已对会话续期（下发新的 sessionid 等），
+    把这份"新鲜" cookie 回写到 GitHub Secret，即可实现 cookie 永不过期的全自动循环。
+
+    用 CDP Network.getAllCookies 获取完整 cookie（含 httpOnly 的 sessionid），
+    再与 context.storage_state() 的 localStorage 合并，最后 slim 到 Secret 可容纳的大小。
+    """
+    import os
+    import json
+
+    try:
+        cdp = page.context.new_cdp_session(page)
+        cdp_cookies = cdp.send("Network.getAllCookies").get("cookies", [])
+        cdp.detach()
+
+        # storage_state 提供 origins(localStorage)；其 cookies 用 CDP 的更全版本替换
+        state = page.context.storage_state()
+        state["cookies"] = cdp_cookies
+
+        slim = slim_state(state)
+
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(slim, f, ensure_ascii=False)
+
+        size_kb = os.path.getsize(path) / 1024
+        logger.info(f"已抓取最新登录态 → {path}（{len(cdp_cookies)} 条 cookie，{size_kb:.1f} KB）")
+        return True
+    except Exception as e:
+        logger.error(f"抓取最新登录态失败: {e}")
+        return False
 
 
 def find_and_click_friend(page: Page, friend_name: str, config: dict,

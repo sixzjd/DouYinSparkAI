@@ -41,7 +41,7 @@ python get_cookies.py
 
 脚本会自动打开浏览器，用手机抖音扫码登录后，Cookie 自动提取并输出到终端和 `cookies.json` 文件。
 
-> Cookie 有效期约 1-3 个月，过期后重新运行 `python get_cookies.py` 并更新 Secret 即可。
+> Cookie 有效期约 1-3 个月。想让它永不过期，可配置「第六步」的自动续期；否则过期后重新运行 `python get_cookies.py` 并更新 Secret 即可。
 
 ### 第三步：配置 GitHub Environment
 
@@ -85,6 +85,26 @@ python get_cookies.py
 1. 进入仓库 **Actions** 页面，启用 workflow
 2. 点 "Run workflow" 手动跑一次，确认日志正常
 3. 搞定。之后每天北京时间 9:00 自动续火花
+
+### 第六步：开启 Cookie 自动续期（可选，推荐）
+
+默认情况下 Cookie 过期后需要手动重新获取。开启自动续期后，**只要每天的任务正常跑，Cookie 就永不过期**，实现真正的全自动。
+
+原理：每次成功运行时，抖音服务端会对会话续期（下发新的 sessionid）。脚本在运行结束后把这份"新鲜" Cookie 自动写回 Secret，下次运行就用最新的，如此循环不断。
+
+一次性配置（约 2 分钟）：
+
+1. 创建专用令牌：GitHub 右上角头像 → **Settings → Developer settings → Fine-grained tokens → Generate new token**
+   - **Resource owner**：你自己
+   - **Repository access**：选 `Only select repositories`，只勾选本项目仓库
+   - **Permissions → Repository permissions → Secrets**：设为 `Read and write`
+   - 其余权限全部留空（No access），把令牌权限压到最小
+   - 生成后**立即复制**（只显示一次）
+2. 回到仓库 **Settings → Secrets and variables → Actions → New repository secret**
+   - Name 填 `GH_PAT`，Value 粘贴刚才的令牌
+3. 完成。下次运行结束后，日志里会出现 `cookie 已自动续期`。
+
+> 不配置 `GH_PAT` 也完全不影响正常续火花，只是 Cookie 过期后需要手动更新而已。令牌只授予本仓库的 Secrets 读写权限，可随时在 Developer settings 里撤销。
 
 ### 修改运行时间（可选）
 
@@ -217,7 +237,7 @@ docker run --rm \
 
 **Q: Cookie 过期了怎么办？**
 
-Actions 会失败（日志有提示）。重新登录创作者中心 → 导出 Cookie → 更新 Secret。
+如果按「第六步」配置了 `GH_PAT`，Cookie 会在每次成功运行后自动续期，理论上永不过期。没配置的话 Actions 会失败（日志有提示），重新运行 `python get_cookies.py` 登录 → 把 `auth_state.json` 更新到 Secret 即可。
 
 **Q: 会被封号吗？**
 

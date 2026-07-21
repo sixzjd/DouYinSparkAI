@@ -11,6 +11,7 @@ import time
 import sys
 
 from playwright.sync_api import sync_playwright
+from utils.state_utils import slim_state
 
 # 登录面板的特征（出现任意一个 = 还没登录）
 LOGIN_FORM_SELECTORS = [
@@ -124,19 +125,10 @@ def main():
     # ── 精简版：只保留 cookie + 安全相关 localStorage ──
     # 完整版约 170KB，超过 GitHub Secret 64KB 限制；
     # 大部分体积是遥测/布局数据，对登录和发消息签名没有用。
-    KEEP_KEYS = ("security-sdk/", "web_secsdk", "xmst", "LOGIN_STATUS", "csrf")
-    slim_origins = []
-    for origin in state.get("origins", []):
-        kept = [
-            it for it in origin.get("localStorage", [])
-            if any(k in it["name"] for k in KEEP_KEYS)
-        ]
-        if kept:
-            slim_origins.append({"origin": origin["origin"], "localStorage": kept})
-
-    slim_state = {"cookies": all_cookies, "origins": slim_origins}
+    slim = slim_state(state)
+    slim_origins = slim.get("origins", [])
     with open("auth_state.json", "w", encoding="utf-8") as f:
-        json.dump(slim_state, f, ensure_ascii=False)
+        json.dump(slim, f, ensure_ascii=False)
 
     # 同时保存纯 cookie（兼容旧格式）
     douyin_cookies = [c for c in all_cookies if "douyin" in c.get("domain", "")]

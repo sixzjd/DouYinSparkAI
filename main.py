@@ -7,7 +7,7 @@ import sys
 import traceback
 
 from core.browser import get_browser
-from core.chat import navigate_to_chat, process_friend, UserIdCollector
+from core.chat import navigate_to_chat, process_friend, UserIdCollector, is_logged_in, capture_fresh_state
 from utils.config import get_config, get_tasks
 from utils.logger import setup_logger
 
@@ -54,6 +54,13 @@ def main():
             try:
                 navigate_to_chat(page, user["cookies"], config, has_storage_state=bool(storage_state))
 
+                if not is_logged_in(page):
+                    logger.error(
+                        f"账号 {username} 登录态已失效，跳过本次任务"
+                        f"（不回写 cookie，避免用失效凭证覆盖有效 Secret）"
+                    )
+                    continue
+
                 for friend in targets:
                     try:
                         process_friend(page, friend, config, id_collector)
@@ -61,6 +68,10 @@ def main():
                         logger.error(f"处理好友 {friend} 出错: {e}")
                         traceback.print_exc()
                         continue
+
+                # 成功运行后抓取最新登录态（服务端通常已续期 session），
+                # 供 CI 回写对应 Secret，实现 cookie 自动续期的全自动循环
+                capture_fresh_state(page, path=f"logs/fresh_cookies_{user['unique_id']}.json")
 
             except Exception as e:
                 logger.error(f"账号 {username} 任务失败: {e}")
