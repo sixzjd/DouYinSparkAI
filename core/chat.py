@@ -286,15 +286,19 @@ def find_and_click_friend(page: Page, friend_name: str, config: dict,
         # ── 到底检测（多重兜底）──
 
         # 1. "没有更多了" 标志
+        hit_bottom = False
         for sel in NO_MORE_SELECTORS:
             if page.locator(sel).count() > 0:
                 logger.info("检测到'没有更多了'，列表已到底")
-                return False
+                hit_bottom = True
+                break
+        if hit_bottom:
+            break
 
         # 2. 连续空滚动
         if empty_scroll_count >= MAX_EMPTY_SCROLLS:
             logger.warning(f"连续 {MAX_EMPTY_SCROLLS} 次无新好友，判定到底")
-            return False
+            break
 
         # 3. 正在加载 → 等一下再继续
         loading = False
@@ -309,7 +313,7 @@ def find_and_click_friend(page: Page, friend_name: str, config: dict,
         scroll_el = _try_locator(page, SCROLL_CONTAINER_SELECTORS, timeout=2000)
         if not scroll_el:
             logger.warning("未找到滚动容器，停止搜索")
-            return False
+            break
 
         handle = scroll_el.element_handle()
         top_before = page.evaluate("(el) => el.scrollTop", handle)
@@ -322,6 +326,13 @@ def find_and_click_friend(page: Page, friend_name: str, config: dict,
             logger.debug(f"scrollTop 未变化 ({top_before})，可能到底")
 
         time.sleep(1.5)
+
+    # 未找到：打印扫描到的全部昵称，方便用户核对 TASKS 里该填什么名字
+    if found_names:
+        logger.info(f"本次扫描到的会话昵称共 {len(found_names)} 个: {sorted(found_names)}")
+    else:
+        logger.warning("未扫描到任何会话昵称（列表可能未加载）")
+    return False
 
 
 def read_recent_messages(page: Page, config: dict) -> list[dict]:
@@ -377,12 +388,16 @@ def read_recent_messages(page: Page, config: dict) -> list[dict]:
     return messages
 
 
-def already_sent_today(messages: list[dict]) -> bool:
-    """最近几条中有自己发的消息 → 认为今天已续过"""
-    for msg in reversed(messages[-3:]):
-        if msg["sender"] == "me":
-            return True
-    return False
+def should_reply(messages: list[dict]) -> bool:
+    """
+    是否需要回复：只有当最后一条消息是对方发的，才回复。
+    回复后最后一条变成"我的"，自然不会重复发送，直到对方再次发消息。
+    这样实现"对方发了我没发 → 回复；我已发过 → 跳过"。
+    """
+    if not messages:
+        return False  # 没读到消息，不贸然发送
+    last = messages[-1]
+    return last["sender"] == "friend"
 
 
 def build_context(messages: list[dict]) -> str:
@@ -441,8 +456,12 @@ def process_friend(page: Page, friend_name: str, config: dict,
     messages = read_recent_messages(page, config)
     logger.info(f"读取到 {len(messages)} 条最近消息")
 
-    if already_sent_today(messages):
-        logger.info(f"今天已给 {friend_name} 发过消息，跳过")
+    if messages:
+        last = messages[-1]
+        logger.info(f"最后一条消息来自: {'我' if last['sender'] == 'me' else '对方'} | 内容: {last['text'][:30]}")
+
+    if not should_reply(messages):
+        logger.info(f"无需回复 {friend_name}（最后一条是我发的，或没有可读消息），跳过")
         return True
 
     context = build_context(messages)
