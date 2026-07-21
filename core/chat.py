@@ -154,6 +154,18 @@ def navigate_to_chat(page: Page, cookies: list[dict], config: dict,
     timeout = config["browser_timeout"]
     retries = config["task_retry_times"]
 
+    # 调试：打印当前 context 中的 cookie 情况
+    ctx_cookies = page.context.cookies(["https://creator.douyin.com"])
+    ctx_names = [c["name"] for c in ctx_cookies]
+    logger.info(f"context 中已有 {len(ctx_cookies)} 条 cookie: {ctx_names}")
+
+    # 调试：监听主文档响应，看服务端返回
+    def _on_response(resp):
+        if "creator.douyin.com" in resp.url and resp.request.resource_type == "document":
+            logger.info(f"[net] {resp.status} {resp.url[:100]}")
+
+    page.on("response", _on_response)
+
     if has_storage_state:
         # storage_state 已包含完整登录态，直接访问私信页
         retry(
@@ -185,6 +197,12 @@ def navigate_to_chat(page: Page, cookies: list[dict], config: dict,
         )
 
     time.sleep(3)
+
+    # 调试：导航后再次检查 cookie（看服务端有没有下发新的/清除）
+    after_cookies = page.context.cookies(["https://creator.douyin.com"])
+    after_names = [c["name"] for c in after_cookies]
+    logger.info(f"导航后 cookie ({len(after_cookies)} 条): {after_names}")
+    logger.info(f"最终落地 URL: {page.url}")
 
     # 调试截图：记录页面实际状态
     os.makedirs("logs", exist_ok=True)
