@@ -65,7 +65,9 @@ jobs:
             uid=$(basename "$f" .json | sed 's/^fresh_cookies_//')
             secret_name="COOKIES_$(echo "$uid" | tr '[:lower:]' '[:upper:]')"
             echo "回写 $secret_name ← $f"
-            gh secret set "$secret_name" --env user-data --body "$(cat "$f")"
+            # 写仓库级 Secret（非环境级）：fine-grained 令牌的 Secrets 权限
+            # 只覆盖仓库级，写环境级会 HTTP 403。COOKIES_* 须建在仓库级。
+            gh secret set "$secret_name" --body "$(cat "$f")"
           done
           echo "cookie 已自动续期"
 

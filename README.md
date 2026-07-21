@@ -43,18 +43,25 @@ python get_cookies.py
 
 > Cookie 有效期约 1-3 个月。想让它永不过期，可配置「第六步」的自动续期；否则过期后重新运行 `python get_cookies.py` 并更新 Secret 即可。
 
-### 第三步：配置 GitHub Environment
+### 第三步：配置 Secrets 和 Variables
 
-进入仓库：**Settings → Secrets and variables → Actions → Environments → New environment**，名称填 `user-data`。
+**① 仓库级 Secret**（Settings → Secrets and variables → Actions → New repository secret）：
 
-**Environment secrets：**
+| 名称 | 内容 |
+|------|------|
+| `COOKIES_USER1` | 抖音 Cookie JSON（`auth_state.json` 的内容） |
+
+> 注意：`COOKIES_*` 必须建在**仓库级**。自动续期用的 fine-grained 令牌其 Secrets 权限只覆盖仓库级 Secret，放在环境级会回写失败（HTTP 403）。
+
+**② 环境**（Settings → Secrets and variables → Actions → Environments → New environment，名称填 `user-data`）：
+
+Environment secrets：
 
 | 名称 | 内容 |
 |------|------|
 | `AI_API_KEY` | AI 接口密钥（如 DeepSeek 的 sk-xxx） |
-| `COOKIES_USER1` | 抖音 Cookie JSON |
 
-**Environment variables：**
+Environment variables：
 
 | 名称 | 内容 | 示例 |
 |------|------|------|
