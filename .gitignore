@@ -22,4 +22,7 @@ Thumbs.db
 # Env
 .env
 cookies.json
-auth_state.json
+auth_state*.json
+
+# 登录测试截图
+test_*.png
