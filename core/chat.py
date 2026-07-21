@@ -399,6 +399,15 @@ def find_and_click_friend(page: Page, friend_name: str, config: dict,
         logger.info(f"本次扫描到的会话昵称共 {len(found_names)} 个: {sorted(found_names)}")
     else:
         logger.warning("未扫描到任何会话昵称（列表可能未加载）")
+
+    # short_id 模式额外诊断：打印拦截到的 抖音号→昵称 映射，
+    # 若为空说明 user_detail 接口没触发，抖音号匹配无从谈起
+    if match_mode == "short_id" and id_collector:
+        if id_collector.mapping:
+            logger.info(f"拦截到的抖音号映射共 {len(id_collector.mapping)} 条: "
+                        f"{ {sid: info.get('nickname') for sid, info in id_collector.mapping.items()} }")
+        else:
+            logger.warning("short_id 模式但未拦截到任何用户映射（user_detail 接口未触发）")
     return False
 
 
