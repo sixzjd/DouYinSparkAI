@@ -418,6 +418,10 @@ def build_context(messages: list[dict]) -> str:
 
 def send_message(page: Page, text: str, config: dict) -> bool:
     """在聊天输入框中输入并发送消息"""
+    if config.get("dry_run"):
+        logger.info(f"[试运行] 将发送但不真正发出: {text}")
+        return True
+
     chat_input = _try_locator(page, CHAT_INPUT_SELECTORS, timeout=10000)
     if not chat_input:
         logger.error("未找到聊天输入框")

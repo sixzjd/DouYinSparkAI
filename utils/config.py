@@ -24,6 +24,8 @@ def get_config() -> dict:
         "log_level": os.getenv("LOG_LEVEL", "INFO"),
         # 好友匹配模式: nickname / short_id
         "match_mode": os.getenv("MATCH_MODE", "nickname"),
+        # 试运行: true 时走完整流程但不真正发送消息（只打印），用于首次验证
+        "dry_run": os.getenv("DRY_RUN", "false").lower() == "true",
     }
 
 

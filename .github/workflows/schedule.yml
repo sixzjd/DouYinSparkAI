@@ -42,6 +42,7 @@ jobs:
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_MODEL: ${{ vars.AI_MODEL }}
           MATCH_MODE: ${{ vars.MATCH_MODE }}
+          DRY_RUN: ${{ vars.DRY_RUN }}
           LOG_LEVEL: "INFO"
         run: python main.py
 
