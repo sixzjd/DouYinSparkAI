@@ -3,7 +3,9 @@ name: DouYin Spark AI - 每日续火花
 on:
   workflow_dispatch:  # 手动触发
   schedule:
-    - cron: "0 11 * * *"  # UTC 11:00 = 北京时间 19:00
+    # 定时任务实际触发会比 cron 晚 1~5 小时（GitHub 排队机制），
+    # 故提前到 UTC 6:00 排队，启动后 sleep 到 UTC 11:00（北京 19:00）再执行
+    - cron: "0 6 * * *"
 
 jobs:
   spark:
@@ -11,17 +13,39 @@ jobs:
     # 用 != 'false' 保证变量未设置时默认运行（向后兼容）。
     # keepalive 任务不受影响，暂停期间 workflow 仍保活。
     if: vars.SPARK_ENABLED != 'false'
-    timeout-minutes: 15
+    # 最坏情况：排队延迟 5 小时 + 等待 5 小时 + 任务本身
+    timeout-minutes: 660
     runs-on: ubuntu-latest
     environment: user-data
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+
+      # GitHub 定时器延迟严重（实测晚 4~6 小时），无法准点。
+      # 仓库是 public、Actions 免费，用"提前排队 + 等到点"保证北京时间 19:00 前后执行；
+      # 若排队延迟导致已过 19:00，则立即执行（宁可晚不可早）。
+      # 手动触发时跳过等待，立即执行。
+      - name: Wait until 19:00 Beijing (UTC 11:00)
+        if: github.event_name == 'schedule'
+        run: |
+          target=$(date -u -d "today 11:00" +%s)
+          now=$(date +%s)
+          wait_sec=$((target - now))
+          if [ $wait_sec -le 0 ]; then
+            echo "已过 UTC 11:00，立即执行"
+            exit 0
+          fi
+          if [ $wait_sec -gt 18000 ]; then
+            echo "等待时间超过 5 小时上限，截断为 5 小时"
+            wait_sec=18000
+          fi
+          echo "等待 ${wait_sec}s 后开始执行"
+          sleep $wait_sec
 
       - name: Test Douyin accessibility
         run: |
@@ -77,7 +101,7 @@ jobs:
           echo "cookie 已自动续期"
 
       - name: Upload logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: run-logs

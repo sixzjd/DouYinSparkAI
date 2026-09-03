@@ -5,7 +5,11 @@ from datetime import datetime
 
 def setup_logger(level: str = "INFO") -> logging.Logger:
     logger = logging.getLogger("spark_ai")
+
+    # 首次调用（通常是模块 import 时）初始化 handler；
+    # 已初始化过则只同步级别，保证 main() 传入的 LOG_LEVEL 能生效
     if logger.handlers:
+        logger.setLevel(getattr(logging, level.upper(), logging.INFO))
         return logger
 
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
