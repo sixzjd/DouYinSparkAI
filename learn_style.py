@@ -129,6 +129,8 @@ def main():
         logger.error("未配置 AI_API_KEY，无法进行风格学习")
         sys.exit(1)
 
+    all_msgs = []  # 跨账号累计，避免只拿到最后一个账号 / 全部跳过时 NameError
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=config["headless"])
 
@@ -159,21 +161,22 @@ def main():
                 continue
 
             # 收集消息
-            my_msgs = collect_my_messages(
+            user_msgs = collect_my_messages(
                 page, config, user["targets"], id_collector
             )
-            logger.info(f"共收集到 {len(my_msgs)} 条我的消息")
+            all_msgs.extend(user_msgs)
+            logger.info(f"共收集到 {len(user_msgs)} 条我的消息")
 
             context.close()
 
         browser.close()
 
-    if not my_msgs:
+    if not all_msgs:
         logger.error("未收集到任何消息，无法生成风格描述")
         sys.exit(1)
 
     # AI 总结
-    profile = summarize_style(my_msgs, config)
+    profile = summarize_style(all_msgs, config)
     if not profile:
         logger.error("风格总结为空")
         sys.exit(1)
