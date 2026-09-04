@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 660
     runs-on: ubuntu-latest
     environment: user-data
+    permissions:
+      issues: write
 
     steps:
       - uses: actions/checkout@v7
@@ -99,6 +101,50 @@ jobs:
             gh secret set "$secret_name" --body "$(cat "$f")"
           done
           echo "cookie 已自动续期"
+
+      # 登录态过期告警：正常成功运行一定会抓到 fresh_cookies（即使没发消息）。
+      # 没抓到 = 登录已失效，自动续期循环断了，需要人工扫码。
+      # 开 issue 通知（同名未关闭 issue 已存在则跳过，避免每天重复开）。
+      - name: Alert if login expired
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          shopt -s nullglob
+          if compgen -G "logs/fresh_cookies_*.json" > /dev/null; then
+            echo "本次抓到了新登录态，续期循环正常"
+            # 登录恢复后自动关闭之前的告警 issue
+            open_issue=$(gh issue list --state open --label login-expired --json number --jq '.[0].number' || true)
+            if [ -n "$open_issue" ]; then
+              echo "登录已恢复，关闭告警 issue #$open_issue"
+              gh issue close "$open_issue" --comment "登录态已自动恢复，续期循环正常。"
+            fi
+            exit 0
+          fi
+          echo "⚠️ 未抓到新登录态，登录可能已过期"
+          existing=$(gh issue list --state open --label login-expired --json number --jq '.[0].number' || true)
+          if [ -n "$existing" ]; then
+            echo "告警 issue #$existing 已存在，不重复创建"
+            exit 0
+          fi
+          gh label create login-expired --color D93F0B --description "抖音登录态过期" 2>/dev/null || true
+          body=$(cat <<'BODY'
+          本次运行没有抓到任何新登录态（logs/fresh_cookies_*.json 不存在），说明 Secret 里的登录凭证已失效，cookie 自动续期循环中断，火花会就此断掉。
+
+          **恢复步骤（任意一台电脑）：**
+          1. 克隆本仓库，`pip install -r requirements.txt && python -m playwright install chromium`
+          2. 运行 `python get_cookies.py`，用手机抖音扫码登录，会生成 `auth_state.json`
+          3. 回写 Secret：`gh secret set COOKIES_USER1 --repo sixzjd/DouYinSparkAI --body "$(cat auth_state.json)"`
+          4. 到 Actions 手动触发一次「DouYin Spark AI - 每日续火花」确认恢复
+
+          恢复后本 issue 会在下次成功运行时自动关闭。
+          BODY
+          )
+          gh issue create \
+            --label login-expired \
+            --title "⚠️ 抖音登录态过期，续火花已停摆，需扫码重新登录" \
+            --body "$body"
 
       - name: Upload logs
         uses: actions/upload-artifact@v7
