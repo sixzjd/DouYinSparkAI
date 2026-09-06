@@ -22,13 +22,18 @@ logger = setup_logger()
 # ─── 多版本 DOM 选择器（抖音 A/B 测试导致不同账号页面结构不同）───
 
 # 好友 tab 按钮
+# 2026-09 改版后原"好友"tab 变为 semi-design 的"朋友私信"tab
 FRIEND_TAB_SELECTORS = [
+    'xpath=//div[contains(@class, "semi-tabs-bar") and contains(text(), "朋友私信")]',
+    'xpath=//div[contains(@class, "semi-tabs-bar") and contains(text(), "全部")]',
     'xpath=//*[@id="sub-app"]/div/div/div[1]/div[2]',
     'xpath=//div[contains(@class, "tab") and contains(text(), "好友")]',
 ]
 
 # 好友列表项（名字所在元素）
 FRIEND_ITEM_SELECTORS = [
+    # 2026-09 改版：semi-design 列表，会话是 li.semi-list-item
+    'xpath=//div[contains(@class, "semi-list")]//li[contains(@class, "semi-list-item")]',
     'xpath=//*[@id="sub-app"]/div/div[1]/div[2]/div[2]//div[contains(@class, "semi-list-item-body")]',
     'xpath=//div[contains(@class, "conversation-item")]',
     'xpath=//div[@data-e2e="conversation-item"]',
@@ -44,7 +49,9 @@ FIRST_FRIEND_SELECTORS = [
 ]
 
 # 滚动容器
+# 2026-09 改版后好友列表改用 react-virtualized 渲染
 SCROLL_CONTAINER_SELECTORS = [
+    '[class*="ReactVirtualized__List"]',
     'xpath=//*[@id="sub-app"]/div/div[1]/div[2]/div[2]/div/div/div[3]/div/div/div/ul/div',
     'xpath=//div[contains(@class, "semi-list")]//div[contains(@class, "virtual-list")]',
     'xpath=//div[contains(@class, "semi-list-body")]',
